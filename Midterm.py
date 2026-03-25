@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-import seaborn as sns
-import matplotlib.pyplot as plt
+import plotly.express as px
 
 st.title("FBI Wanted List — Exploratory Data Analysis")
 st.header("Analysis of 1,138 records pulled from the FBI's public Wanted API.")
@@ -74,21 +73,21 @@ def load_data():
 
 df = load_data()
 
-# filters
+# sidebar filters
 
-st.header("Filters")
+st.sidebar.header("Filters")
 
 all_sexes = df["sex"].unique().tolist()
-selected_sex = st.multiselect("Sex", all_sexes, default=all_sexes)
+selected_sex = st.sidebar.multiselect("Sex", all_sexes, default=all_sexes)
 
 all_races = df["race"].unique().tolist()
-selected_race = st.multiselect("Race", all_races, default=all_races)
+selected_race = st.sidebar.multiselect("Race", all_races, default=all_races)
 
-year_min = df["year_posted"].min()
-year_max = df["year_posted"].max()
+year_min = int(df["year_posted"].min())
+year_max = int(df["year_posted"].max())
 
-selected_years = st.slider("Year Posted", year_min, year_max, (year_min, year_max))
-reward_filter = st.selectbox("Has Reward?", ["All", "Yes", "No"])
+selected_years = st.sidebar.slider("Year Posted", year_min, year_max, (year_min, year_max))
+reward_filter = st.sidebar.selectbox("Has Reward?", ["All", "Yes", "No"])
 
 # apply filters
 filtered_df = df[df["sex"].isin(selected_sex)]
@@ -99,22 +98,30 @@ filtered_df = filtered_df[filtered_df["year_posted"] <= selected_years[1]]
 if reward_filter != "All":
     filtered_df = filtered_df[filtered_df["has_reward"] == reward_filter]
 
-st.write(f"{len(filtered_df)} records match the selected filters")
+st.sidebar.write(f"{len(filtered_df)} records match the selected filters")
 
-# summary metrics
+# overview section
 
-total = len(filtered_df)
-st.write(f"Total Listings: {total}")
+st.header("Overview")
 
-with_reward = filtered_df[filtered_df["has_reward"] == "Yes"]
-st.write(f"With Reward: {len(with_reward)}")
+col1, col2, col3, col4 = st.columns(4)
 
-unique_crimes = filtered_df["primary_crime"].unique()
-num_crimes = len(unique_crimes)
-st.write(f"Crime Categories: {num_crimes}")
+with col1:
+    st.metric("Total Listings", len(filtered_df))
 
-avg_reward = round(filtered_df["reward_min"].mean(), 2)
-st.write(f"Avg Reward: ${avg_reward}")
+with col2:
+    with_reward_count = len(filtered_df[filtered_df["has_reward"] == "Yes"])
+    st.metric("With Reward", with_reward_count)
+
+with col3:
+    num_crimes = len(filtered_df["primary_crime"].unique())
+    st.metric("Crime Categories", num_crimes)
+
+with col4:
+    avg_reward = filtered_df["reward_min"].mean()
+    st.metric("Avg Reward", f"${avg_reward:,.2f}")
+
+st.divider()
 
 # tabs
 
@@ -129,74 +136,56 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
 
-    # count how many times each crime appears, keep + plot top 15 categories
     st.subheader("Top Crime Categories on the FBI Wanted List")
-    crime_counts = filtered_df["primary_crime"].value_counts()
-    crime_counts = crime_counts.head(15)
-
-    fig, ax = plt.subplots()
-    sns.barplot(x=crime_counts.values, y=crime_counts.index, ax=ax)
-    ax.set_xlabel("Number of Listings")
-    ax.set_ylabel("Crime Category")
-    st.pyplot(fig)
+    crime_counts = filtered_df["primary_crime"].value_counts().head(15)
+    
+    fig = px.bar(x=crime_counts.values, y=crime_counts.index, orientation='h', labels={'x': 'Number of Listings', 'y': 'Crime Category'})
+    fig.update_layout(yaxis={'categoryorder':'total ascending'})
+    st.plotly_chart(fig, use_container_width=True)
 
     st.write("Seeking Information is the largest category, suggesting the FBI uses the list to solicit public tips. Cyber and counterintelligence cases are also prominent.")
 
-    # count how many new listings per year and plot
     st.subheader("Listings Posted Per Year")
-    yearly_counts = filtered_df["year_posted"].value_counts()
-    yearly_counts = yearly_counts.sort_index()
+    yearly_counts = filtered_df["year_posted"].value_counts().sort_index()
 
-    fig, ax = plt.subplots()
-    sns.lineplot(x=yearly_counts.index, y=yearly_counts.values)
-    ax.set_xlabel("Year")
-    ax.set_ylabel("Number of Listings")
-    st.pyplot(fig)
+    fig = px.line(x=yearly_counts.index, y=yearly_counts.values, labels={'x': 'Year', 'y': 'Number of Listings'})
+    st.plotly_chart(fig, use_container_width=True)
 
     st.write("Listings have grown steadily, with notable spikes in cybercrime and counterintelligence years.")
 
-    # count how many listings each field office has and plot top 15
     st.subheader("Top 15 FBI Field Offices by Number of Listings")
     office_counts = filtered_df["primary_office"].value_counts().head(15)
 
-    fig, ax = plt.subplots()
-    sns.barplot(x=office_counts.values, y=office_counts.index, ax=ax)
-    ax.set_xlabel("Number of Listings")
-    ax.set_ylabel("Field Office")
-    st.pyplot(fig)
+    fig = px.bar(x=office_counts.values, y=office_counts.index, orientation='h', labels={'x': 'Number of Listings', 'y': 'Field Office'})
+    fig.update_layout(yaxis={'categoryorder':'total ascending'})
+    st.plotly_chart(fig, use_container_width=True)
     st.write("New York and Washington D.C. dominate the list, which aligns with the prominence of counterintelligence and cyber cases.")
 
 # tab 2: demographics
 
 with tab2:
 
-    # count how many of each sex are on the list + plot
     st.subheader("Sex Distribution of FBI Wanted Individuals")
     sex_counts = filtered_df["sex"].value_counts()
-    fig, ax = plt.subplots()
-    ax.pie(sex_counts, labels=sex_counts.index, autopct="%1.1f%%", colors=["steelblue", "lightpink", "lightgray", "lightyellow"])
-    st.pyplot(fig)
+    
+    fig = px.pie(values=sex_counts.values, names=sex_counts.index, color_discrete_sequence=["steelblue", "lightpink", "lightgray", "lightyellow"])
+    st.plotly_chart(fig, use_container_width=True)
     st.write("The list is overwhelmingly male.")
 
-    # count how many ppl of each race are on the list + plot
     st.subheader("Race Distribution of FBI Wanted Individuals")
     race_counts = filtered_df["race"].value_counts()
-    fig, ax = plt.subplots()
-    sns.barplot(x=race_counts.values, y=race_counts.index, ax=ax)
-    ax.set_xlabel("Count")
-    ax.set_ylabel("Race")
-    st.pyplot(fig)
+    
+    fig = px.bar(x=race_counts.values, y=race_counts.index, orientation='h', labels={'x': 'Count', 'y': 'Race'})
+    fig.update_layout(yaxis={'categoryorder':'total ascending'})
+    st.plotly_chart(fig, use_container_width=True)
     st.write("White and Hispanic individuals make up the largest share of listings.")
 
-    # count how many ppl from each country, keep top 10
     st.subheader("Top 10 Nationalities on the FBI Wanted List")
-    nationality_counts = filtered_df["nationality"].value_counts()
-    nationality_counts = nationality_counts.head(10)
-    fig, ax = plt.subplots()
-    sns.barplot(x=nationality_counts.values, y=nationality_counts.index)
-    ax.set_xlabel("Number of Listings")
-    ax.set_ylabel("Nationality")
-    st.pyplot(fig)
+    nationality_counts = filtered_df["nationality"].value_counts().head(10)
+    
+    fig = px.bar(x=nationality_counts.values, y=nationality_counts.index, orientation='h', labels={'x': 'Number of Listings', 'y': 'Nationality'})
+    fig.update_layout(yaxis={'categoryorder':'total ascending'})
+    st.plotly_chart(fig, use_container_width=True)
     st.write("Americans are the largest group, but many listings involve foreign nationals, particularly from countries associated with counterintelligence cases like China and Iran.")
 
 # tab 3: rewards
@@ -205,44 +194,33 @@ with tab3:
 
     st.subheader("Share of Listings with Rewards")
     reward_share = filtered_df["has_reward"].value_counts()
-    fig, ax = plt.subplots()
-    sns.barplot(x=reward_share.index, y=reward_share.values)
-    ax.set_xlabel("Has Reward")
-    ax.set_ylabel("Count")
-    st.pyplot(fig)
+    
+    fig = px.bar(x=reward_share.index, y=reward_share.values, labels={'x': 'Has Reward', 'y': 'Count'})
+    st.plotly_chart(fig, use_container_width=True)
     st.write("Most listings do not include a reward.")
 
-    # only keep rows where a reward is offered
-    # calculate average reward for each crime type
     st.subheader("Average Reward by Crime Category")
     reward_df = filtered_df[filtered_df["reward_min"] > 0]
-    mean_reward = reward_df.groupby("primary_crime")["reward_min"].mean()
-    mean_reward = mean_reward.sort_values()
+    mean_reward = reward_df.groupby("primary_crime")["reward_min"].mean().sort_values()
 
-    fig, ax = plt.subplots()
-    sns.barplot(x=mean_reward.values, y=mean_reward.index)
-    ax.set_xlabel("Average Reward ($)")
-    ax.set_ylabel("Crime Category")
-    st.pyplot(fig)
+    fig = px.bar(x=mean_reward.values, y=mean_reward.index, orientation='h', labels={'x': 'Average Reward ($)', 'y': 'Crime Category'})
+    st.plotly_chart(fig, use_container_width=True)
     st.write("Criminal Enterprise and terrorism-related listings average $1M — the maximum reward offered.")
 
 # tab 4: physical profile
 
 with tab4:
 
-    # only keep rows with realistic height and weight
     st.subheader("Height vs. Weight of FBI Wanted Individuals")
     hw_df = filtered_df[filtered_df["height_min"] < 85]
     hw_df = hw_df[hw_df["weight_min"] < 500]
     hw_df = hw_df[hw_df["height_min"].notna()]
     hw_df = hw_df[hw_df["weight_min"].notna()]
 
-    fig, ax = plt.subplots()
-    sns.scatterplot(data=hw_df, x="height_min", y="weight_min", hue="has_reward", ax=ax)
-    ax.set_xlabel("Height (in)")
-    ax.set_ylabel("Weight (lbs)")
-    ax.set_title("Height vs. Weight of FBI Wanted Individuals")
-    st.pyplot(fig)
+    fig = px.scatter(hw_df, x="height_min", y="weight_min", color="has_reward", 
+                     labels={'height_min': 'Height (in)', 'weight_min': 'Weight (lbs)', 'has_reward': 'Has Reward'},
+                     title="Height vs. Weight of FBI Wanted Individuals")
+    st.plotly_chart(fig, use_container_width=True)
     st.write("The cluster between 60-75 inches and 140-220 lbs represents the typical adult male profile. Outliers with very low height/weight likely represent missing children cases.")
 
 # raw data
